@@ -1,0 +1,8 @@
+requests
+urllib3
+flask
+Flask-BasicAuth
+ncclient
+xmltodict
+beautifulsoup4
+import difflib
