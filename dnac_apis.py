@@ -66,6 +66,20 @@ def get_dnac_jwt_token(dnac_auth):
     return dnac_jwt_token
 
 
+def get_device_info(device_id, dnac_jwt_token):
+    """
+    This function will retrieve all the information for the device with the Cisco DNA Center device id
+    :param device_id: Cisco DNA Center device_id
+    :param dnac_jwt_token: Cisco DNA Center token
+    :return: device info
+    """
+    url = DNAC_URL + '/dna/intent/api/v1/network-device?id=' + device_id
+    header = {'content-type': 'application/json', 'x-auth-token': dnac_jwt_token}
+    device_response = requests.get(url, headers=header, verify=False)
+    device_info = device_response.json()
+    return device_info['response'][0]
+
+
 def pnp_get_device_list(dnac_jwt_token):
     """
     This function will retrieve the PnP device list info
@@ -250,7 +264,7 @@ def get_physical_topology(ip_address, dnac_jwt_token):
     :param dnac_jwt_token: Cisco DNA C token
     :return: topology info - connected device hostname and interface
     """
-    url = DNAC_URL + '/api/v1/topology/physical-topology'
+    url = DNAC_URL + '/dna/intent/api/v1/topology/physical-topology'
     header = {'content-type': 'application/json', 'x-auth-token': dnac_jwt_token}
     response = requests.get(url, headers=header, verify=False)
     topology_json = response.json()['response']
@@ -297,7 +311,7 @@ def sync_device(device_name, dnac_jwt_token):
     """
     device_id = get_device_id_name(device_name, dnac_jwt_token)
     param = [device_id]
-    url = DNAC_URL + '/api/v1/network-device/sync?forceSync=true'
+    url = DNAC_URL + '/dna/intent/api/v1/network-device/sync?forceSync=true'
     header = {'content-type': 'application/json', 'x-auth-token': dnac_jwt_token}
     sync_response = requests.put(url, data=json.dumps(param), headers=header, verify=False)
     task = sync_response.json()['response']['taskId']
@@ -310,137 +324,9 @@ def get_all_device_info(dnac_jwt_token):
     :param dnac_jwt_token: DNA C token
     :return: DNA C device inventory info
     """
-    url = DNAC_URL + '/api/v1/network-device'
+    url = DNAC_URL + '/dna/intent/api/v1/network-device?hostname=NYC.*'
     header = {'content-type': 'application/json', 'x-auth-token': dnac_jwt_token}
     all_device_response = requests.get(url, headers=header, verify=False)
     all_device_info = all_device_response.json()
     return all_device_info['response']
-
-
-def get_device_info(device_id, dnac_jwt_token):
-    """
-    This function will retrieve all the information for the device with the DNA C device id
-    :param device_id: DNA C device_id
-    :param dnac_jwt_token: DNA C token
-    :return: device info
-    """
-    url = DNAC_URL + '/dna/intent/api/v1/network-device/' + device_id
-    header = {'content-type': 'application/json', 'x-auth-token': dnac_jwt_token}
-    device_response = requests.get(url, headers=header, verify=False)
-    device_info = device_response.json()
-    return device_info['response']['hostname']
-
-
-def get_device_config(device_id, dnac_jwt_token):
-    """
-    This function will collect the last Cisco DNA Center saved device configuration
-    :param device_id: DNA C device_id
-    :param dnac_jwt_token: DNA C token
-    :return: string with the configuration
-    """
-    url = DNAC_URL + '/dna/intent/api/v1/network-device/' + device_id + '/config'
-    header = {'content-type': 'application/json', 'x-auth-token': dnac_jwt_token}
-    config_response = requests.get(url, headers=header, verify=False)
-    config_json = config_response.json()
-    config_str = config_json['response']
-    return config_str
-
-
-def get_issue_enrichment_details(event_id, dnac_jwt_token):
-    """
-    This function will collect the Cisco DNA Center Assurance event details
-    :param event_id: Assurance event id
-    :param dnac_jwt_token:
-    :return: DNA C token
-    """
-    url = DNAC_URL + '/dna/intent/api/v1/issue-enrichment-details'
-    header = {'content-type': 'application/json', 'x-auth-token': dnac_jwt_token, 'entity_type': 'issue_id', 'entity_value': event_id}
-    issue_details = requests.get(url, headers=header, verify=False)
-    issue_details_json = issue_details.json()['issueDetails']['issue'][0]
-    return issue_details_json
-
-
-def get_output_command_runner(command, device_id, dnac_jwt_token):
-    """
-    This function will return the output of the CLI command specified in the {command}, sent to the device with the
-    hostname {device}
-    :param command: CLI command
-    :param device_id: device id
-    :param dnac_jwt_token: Cisco DNA Center token
-    :return: file with the command output
-    """
-
-    # get the Cisco DNA Center task id that will execute the CLI command runner
-    payload = {
-        "commands": [command],
-        "deviceUuids": [device_id],
-        "timeout": 0
-        }
-    url = DNAC_URL + '/dna/intent/api/v1/network-device-poller/cli/read-request'
-    header = {'content-type': 'application/json', 'x-auth-token': dnac_jwt_token}
-    response = requests.post(url, data=json.dumps(payload), headers=header, verify=False)
-    response_json = response.json()
-    try:
-        task_id = response_json['response']['taskId']
-    except:
-        print('\n' + response_json['response']['detail'])
-        return
-
-    # get task id status
-    # wait 2 second for the command runner task to be started
-    time.sleep(2)
-    task_result = check_task_id_output(task_id, dnac_jwt_token)
-    file_info = json.loads(task_result['progress'])
-    file_id = file_info['fileId']
-
-    # get output from file
-    time.sleep(2)  # wait for 2 seconds for the file to be ready
-    file_output = get_content_file_id(file_id, dnac_jwt_token)
-    command_responses = file_output[0]['commandResponses']
-    if command_responses['SUCCESS'] != {}:
-        command_output = command_responses['SUCCESS'][command]
-    elif command_responses['FAILURE'] != {}:
-        command_output = command_responses['FAILURE'][command]
-    else:
-        command_output = command_responses['BLACKLISTED'][command]
-    return command_output
-
-
-def check_task_id_output(task_id, dnac_jwt_token):
-    """
-    This function will check the status of the task with the id {task_id}.
-    Loop one seconds increments until task is completed.
-    :param task_id: task id
-    :param dnac_jwt_token: Cisco DNA Center token
-    :return: status - {SUCCESS} or {FAILURE}
-    """
-    url = DNAC_URL + '/dna/intent/api/v1/task/' + task_id
-    header = {'content-type': 'application/json', 'x-auth-token': dnac_jwt_token}
-    completed = 'no'
-    while completed == 'no':
-        try:
-            task_response = requests.get(url, headers=header, verify=False)
-            task_json = task_response.json()
-            task_output = task_json['response']
-            # check if file id available in output
-            file_info = json.loads(task_output['progress'])
-            completed = 'yes'
-        finally:
-            time.sleep(1)
-    return task_output
-
-
-def get_content_file_id(file_id, dnac_jwt_token):
-    """
-    This function will download the file specified by the {file_id}
-    :param file_id: file id
-    :param dnac_jwt_token: Cisco DNA Center token
-    :return: file
-    """
-    url = DNAC_URL + '/dna/intent/api/v1/file/' + file_id
-    header = {'content-type': 'application/json', 'x-auth-token': dnac_jwt_token}
-    response = requests.get(url, headers=header, verify=False, stream=True)
-    response_json = response.json()
-    return response_json
-
 

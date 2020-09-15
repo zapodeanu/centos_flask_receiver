@@ -33,7 +33,6 @@ import datetime
 import os
 import time
 import reporting
-import issue_recommendation
 
 from flask import Flask, request, abort, send_from_directory
 from flask_basicauth import BasicAuth
@@ -43,7 +42,6 @@ from urllib3.exceptions import InsecureRequestWarning  # for insecure https warn
 import pagerduty_apis
 import jira_apis
 import webex_teams_apis
-import dnac_apis
 import utils
 import reporting
 import teams_bot
@@ -71,9 +69,8 @@ basic_auth = BasicAuth(app)
 
 
 @app.route('/')  # create a page for testing the flask framework
-@basic_auth.required
 def index():
-    return "<h1 style='color:blue'>The CentOs Flask Receiver is Up!</h1>", 200
+    return '<h1>Flask Receiver App is Up!</h1>', 200
 
 
 @app.route('/detailed_logs', methods=['GET'])  # create a return detailed logs file
@@ -111,7 +108,7 @@ def webhook():
             category = dnac_notification['category']
             timestamp = str(datetime.datetime.fromtimestamp(int(dnac_notification['timestamp'] / 1000)).strftime(
                 '%Y-%m-%d %H:%M:%S'))
-            issue_name = dnac_notification['details']['Assurance Issue Name'] + ' - Notification from Cisco DNA Center, CentOS'
+            issue_name = dnac_notification['details']['Assurance Issue Name'] + ' - Notification from Cisco DNA Center, PA'
             issue_description = dnac_notification['details']['Assurance Issue Details']
             issue_status = dnac_notification['details']['Assurance Issue Status']
             dnac_issue_url = dnac_notification['ciscoDnaEventLink']
@@ -143,11 +140,6 @@ def webhook():
             # update the Jira issue with the Cisco DNA Center event url
             jira_issue_update = 'The Cisco DNA Center issue details may be accessed here ' + str(dnac_issue_url)
             jira_apis.update_issue(jira_project, jira_component, issue_number, jira_issue_update)
-
-            # update the Jira issue with the recommended steps
-            suggested_steps = issue_recommendation.builder(dnac_notification['instanceId'])
-            for step in suggested_steps:
-                jira_apis.update_issue(jira_project, jira_component, issue_number, step)
 
             # build the Jira Issue url
             jira_issue_url = JIRA_ISSUES + issue_number
@@ -204,7 +196,76 @@ def webhook():
 
             # post message in teams space
             print('New DNAC Webex Teams_Message\n', str(teams_message))
-            webex_teams_apis.post_room_markdown_message(WEBEX_TEAMS_ROOM, teams_message)
+            # webex_teams_apis.post_room_markdown_message(WEBEX_TEAMS_ROOM, teams_message)
+
+            # create the cards payload
+            space_id = webex_teams_apis.get_room_id(WEBEX_TEAMS_ROOM)
+
+            card_message = {
+                "roomId": space_id,
+                "markdown": "Cisco DNA Center Notification",
+                "attachments": [
+                    {
+                        "contentType": "application/vnd.microsoft.card.adaptive",
+                        "content": {
+                            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                            "type": "AdaptiveCard",
+                            "version": "1.0",
+                            "body": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "Cisco DNA Center Notification",
+                                    "weight": "bolder",
+                                    "size": "large"
+                                },
+                                {
+                                    "type": "FactSet",
+                                    "facts": [
+                                        {
+                                            "title": "Severity:",
+                                            "value": severity
+                                        },
+                                        {
+                                            "title": "Category:",
+                                            "value": category
+                                        },
+                                        {
+                                            "title": "Timestamp:",
+                                            "value": str(timestamp)
+                                        },
+                                        {
+                                            "title": "Issue Name:",
+                                            "value": issue_name
+                                        },
+                                        {
+                                            "title": "Issue Description:",
+                                            "value": issue_description
+                                        },
+                                        {
+                                            "title": "Issue Status:",
+                                            "value": issue_status
+                                        }
+                                    ]
+                                }
+                            ],
+                            "actions": [
+                                {
+                                    "type": "Action.openURL",
+                                    "title": "Cisco DNA Center Issue Details",
+                                    "url": dnac_issue_url
+                                },
+                                {
+                                    "type": "Action.openURL",
+                                    "title": "Jira Service Desk Issue Number " + issue_number,
+                                    "url": jira_issue_url
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+            webex_teams_apis.post_room_card_message(WEBEX_TEAMS_ROOM, card_message)
 
             print('Webex Teams notification message posted')
         return 'Notification Received', 201
@@ -212,6 +273,40 @@ def webhook():
         return 'POST Method not supported', 404
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, ssl_context='adhoc')
+@app.route('/teams', methods=['POST'])  # create a route for /Teams, method POST, to receive webhooks from teams
+def teams_webhook():
+    if request.method == 'POST':
+        print('Teams Webhook Received')
+        webhook_json = request.json
 
+        # print the received notification
+        print('Payload: ')
+        print(webhook_json)
+
+        # save as a file, create new file if not existing, append to existing file, full details of each notification
+        with open('all_teams_detailed.log', 'a') as filehandle:
+            filehandle.write('%s\n' % json.dumps(webhook_json))
+
+        # send the message to the bot function
+        status = teams_bot.message_handler(webhook_json)
+        return 'Webhook Received', 201
+    else:
+        return 'POST Method not supported', 404
+
+
+@app.route('/ios')  # create a page for the ios automation testing
+@basic_auth.required
+def ios():
+    return 'IOS decorator tested OK', 200
+
+
+@app.route('/ios/today')  # create a route for ios voice automation/today
+@basic_auth.required
+def today():
+    count = reporting.today()
+    teams_answer = 'Today we had ' + str(count) + ' notifications'
+    return teams_answer, 200
+
+
+if __name__ == '__main__':
+    app.run(debug=True)

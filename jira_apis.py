@@ -105,17 +105,18 @@ def create_customer_issue(jira_project, jira_component, summary, description, se
     }
     header = {'Accept': 'application/json', 'Content-Type': 'application/json'}
     response = requests.post(url, auth=JIRA_AUTH, data=json.dumps(payload), headers=header)
+    print(response.text)
     response_json = response.json()
     return response_json
 
 
-def update_issue(jira_project, jira_component, jira_issue, comment):
+def update_issue(jira_project, jira_component, jira_issue, update_comment):
     """
     This function will create a new customer issue
     :param jira_project: The project used for the Service Desk
     :param jira_component: type of issue, example; Cisco DNA Center Notification
     :param jira_issue: the Jira Service Desk issue number
-    :param comment: new comment
+    :param update_comment: new comment
     :return:
     """
     url = JIRA_URL + '/rest/api/2/issue/' + jira_issue + '/comment'
@@ -129,5 +130,4 @@ def update_issue(jira_project, jira_component, jira_issue, comment):
         return posted_comment
     else:
         return 'Status code ' + str(status_code)
-
 
