@@ -3,7 +3,7 @@
 """
 
 
-Copyright (c) 2019 Cisco and/or its affiliates.
+Copyright (c) 2020 Cisco and/or its affiliates.
 
 This software is licensed to you under the terms of the Cisco Sample
 Code License, Version 1.1 (the "License"). You may obtain a copy of the
@@ -23,7 +23,7 @@ or implied.
 __author__ = "Gabriel Zapodeanu TME, ENB"
 __email__ = "gzapodea@cisco.com"
 __version__ = "0.1.0"
-__copyright__ = "Copyright (c) 2019 Cisco and/or its affiliates."
+__copyright__ = "Copyright (c) 2020 Cisco and/or its affiliates."
 __license__ = "Cisco Sample Code License, Version 1.1"
 
 
